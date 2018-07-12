@@ -107,6 +107,8 @@ class NetworkInference(NetworkAnalysis):
             # Get realisations for all candidates.
             cand_real = data.get_realisations(self.current_value,
                                               candidate_set)[0]
+            # Reshape candidates to a 1D-array, where realisations for a single
+            # candidate are treated as one chunk.
             cand_real = cand_real.T.reshape(cand_real.size, 1)
 
             # Calculate the (C)MI for each candidate and the target.
@@ -212,7 +214,7 @@ class NetworkInferenceMI(NetworkInference):
                 settings['max_lag_sources'] < 0):
             raise RuntimeError('max_lag_sources has to be an integer >= 0.')
         if (type(settings['tau_sources']) is not int or
-                settings['tau_sources'] <= 0):
+                settings['tau_sources'] < 0):
             raise RuntimeError('tau_sources must be an integer > 0.')
         if settings['min_lag_sources'] > settings['max_lag_sources']:
             raise RuntimeError('min_lag_sources ({0}) must be smaller or equal'
@@ -446,7 +448,10 @@ class NetworkInferenceBivariate(NetworkInference):
         """
         # Define candidate set and get realisations.
         procs = self.source_set
-        samples = np.arange(
+        if self.settings['max_lag_sources'] == 0:
+            samples = np.zeros(1).astype(int)
+        else:
+            samples = np.arange(
                 self.current_value[1] - self.settings['min_lag_sources'],
                 self.current_value[1] - self.settings['max_lag_sources'],
                 -self.settings['tau_sources'])
@@ -483,10 +488,13 @@ class NetworkInferenceMultivariate(NetworkInference):
     def _include_source_candidates(self, data):
         """Test candidates in the source's past."""
         procs = self.source_set
-        samples = np.arange(
-                    self.current_value[1] - self.settings['min_lag_sources'],
-                    self.current_value[1] - self.settings['max_lag_sources'],
-                    -self.settings['tau_sources'])
+        if self.settings['max_lag_sources'] == 0:
+            samples = np.zeros(1).astype(int)
+        else:
+            samples = np.arange(
+                self.current_value[1] - self.settings['min_lag_sources'],
+                self.current_value[1] - self.settings['max_lag_sources'],
+                -self.settings['tau_sources'])
         candidates = self._define_candidates(procs, samples)
         # Possible extension in the future: include non-selected target
         # candidates as further candidates, # they may get selected due to

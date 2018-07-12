@@ -9,8 +9,43 @@ import itertools as it
 import numpy as np
 from idtxl.multivariate_mi import MultivariateMI
 from idtxl.data import Data
-from idtxl.estimators_jidt import JidtDiscreteCMI
+from idtxl.estimators_jidt import JidtDiscreteCMI, JidtKraskovMI
 from test_estimators_jidt import jpype_missing
+
+
+@jpype_missing
+def test_zero_lag():
+    """Test analysis for 0 lag."""
+    covariance = 0.4
+    n = 10000
+    source = np.random.normal(0, 1, size=n)
+    target = (covariance * source + (1 - covariance) *
+              np.random.normal(0, 1, size=n))
+    # expected_corr = covariance / (np.sqrt(covariance**2 + (1-covariance)**2))
+    corr = np.corrcoef(source, target)[0, 1]
+    expected_mi = -0.5 * np.log(1 - corr**2)
+
+    data = Data(np.vstack((source, target)), dim_order='ps', normalise=False)
+    settings = {
+        'cmi_estimator': 'JidtKraskovCMI',
+        'n_perm_max_stat': 21,
+        'n_perm_min_stat': 21,
+        'n_perm_max_seq': 21,
+        'n_perm_omnibus': 21,
+        'tau_sources': 0,
+        'max_lag_sources': 0,
+        'min_lag_sources': 0}
+    nw = MultivariateMI()
+    results = nw.analyse_single_target(
+        settings, data, target=1, sources='all')
+    mi_estimator = JidtKraskovMI(settings={})
+    jidt_mi = mi_estimator.estimate(source, target)
+    assert np.isclose(
+        results.single_target[1].omnibus_mi, jidt_mi, rtol=0.05), (
+            'Incorrect results for correlated Gaussians with 0 lag.')
+    assert np.isclose(
+        results.single_target[1].omnibus_mi, expected_mi, rtol=0.05), (
+            'Incorrect results for correlated Gaussians with 0 lag.')
 
 
 @jpype_missing
@@ -105,7 +140,6 @@ def test_multivariate_mi_one_realisation_per_replication():
     settings = {
         'cmi_estimator': 'JidtKraskovCMI',
         'n_perm_max_stat': 21,
-        'max_lag_target': 5,
         'max_lag_sources': 5,
         'min_lag_sources': 4}
     target = 0
@@ -123,8 +157,7 @@ def test_multivariate_mi_one_realisation_per_replication():
     assert (not nw_0.selected_vars_sources)
     assert (not nw_0.selected_vars_target)
     assert ((nw_0._replication_index == np.arange(n_repl)).all())
-    assert (nw_0._current_value == (target, max(
-           settings['max_lag_sources'], settings['max_lag_target'])))
+    assert (nw_0._current_value == (target, settings['max_lag_sources']))
     assert (nw_0._current_value_realisations[:, 0] ==
             data.data[target, -1, :]).all()
 
@@ -135,8 +168,7 @@ def test_faes_method():
     settings = {'cmi_estimator': 'JidtKraskovCMI',
                 'add_conditionals': 'faes',
                 'max_lag_sources': 5,
-                'min_lag_sources': 3,
-                'max_lag_target': 7}
+                'min_lag_sources': 3}
     nw_1 = MultivariateMI()
     data = Data()
     data.generate_mute_data()
@@ -153,8 +185,7 @@ def test_add_conditional_manually():
     """Enforce the conditioning on additional variables."""
     settings = {'cmi_estimator': 'JidtKraskovCMI',
                 'max_lag_sources': 5,
-                'min_lag_sources': 3,
-                'max_lag_target': 7}
+                'min_lag_sources': 3}
     nw = MultivariateMI()
     data = Data()
     data.generate_mute_data()
@@ -220,12 +251,12 @@ def test_check_source_set():
 def test_define_candidates():
     """Test candidate definition from a list of procs and a list of samples."""
     target = 1
-    tau_target = 3
-    max_lag_target = 10
+    tau_sources = 3
+    max_lag_sources = 10
     current_val = (target, 10)
     procs = [target]
-    samples = np.arange(current_val[1] - 1, current_val[1] - max_lag_target,
-                        -tau_target)
+    samples = np.arange(current_val[1] - 1, current_val[1] - max_lag_sources,
+                        -tau_sources)
     nw = MultivariateMI()
     candidates = nw._define_candidates(procs, samples)
     assert (1, 9) in candidates, 'Sample missing from candidates: (1, 9).'
@@ -238,7 +269,7 @@ def test_analyse_network():
     """Test method for full network analysis."""
     n_processes = 5  # the MuTE network has 5 nodes
     data = Data()
-    data.generate_mute_data(10, 5)
+    data.generate_mute_data(10, n_processes)
     settings = {
         'cmi_estimator': 'JidtKraskovCMI',
         'n_perm_max_stat': 21,
@@ -246,8 +277,7 @@ def test_analyse_network():
         'n_perm_max_seq': 21,
         'n_perm_omnibus': 21,
         'max_lag_sources': 5,
-        'min_lag_sources': 4,
-        'max_lag_target': 5}
+        'min_lag_sources': 4}
     nw_0 = MultivariateMI()
 
     # Test all to all analysis
@@ -304,7 +334,6 @@ def test_permute_time():
         'n_perm_omnibus': 21,
         'max_lag_sources': 5,
         'min_lag_sources': 4,
-        'max_lag_target': 5,
         'permute_in_time': True}
     nw_0 = MultivariateMI()
     results = nw_0.analyse_network(
@@ -341,8 +370,7 @@ def test_discrete_input():
         'n_perm_omnibus': 30,
         'n_perm_max_seq': 30,
         'min_lag_sources': 1,
-        'max_lag_sources': 2,
-        'max_lag_target': 1}
+        'max_lag_sources': 2}
     nw = MultivariateMI()
     res = nw.analyse_single_target(settings=settings, data=data, target=1)
     assert np.isclose(
@@ -377,6 +405,7 @@ def test_indices_to_lags():
 
 
 if __name__ == '__main__':
+    test_zero_lag()
     test_analyse_network()
     test_discrete_input()
     test_check_source_set()
