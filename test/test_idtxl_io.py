@@ -1,8 +1,99 @@
 """Unit tests for IDTxl I/O functions."""
+import os
+import pickle
 import pytest
 import numpy as np
 from pkg_resources import resource_filename
 from idtxl import idtxl_io as io
+from idtxl.data import Data
+from idtxl.network_comparison import NetworkComparison
+
+
+def test_export_networkx():
+    """Test export to networkx DiGrap() object."""
+    raise AssertionError('Test not yet implemented.')
+
+
+def test_export_brain_net():
+    """Test export to BrainNet Viewer toolbox."""
+    n_nodes = 5
+    data_0 = Data()
+    data_0.generate_mute_data(500, 5)
+    data_1 = Data(np.random.rand(n_nodes, 500, 5), 'psr')
+
+    path = os.path.join(os.path.dirname(__file__), 'data/')
+    res_0 = pickle.load(open(path + 'mute_results_0.p', 'rb'))
+    res_1 = pickle.load(open(path + 'mute_results_1.p', 'rb'))
+
+    outfile = '{0}brain_net'.format(path)
+    # Export of network inference results.
+    mni_coord = np.random.randint(10, size=(n_nodes, 3))
+    node_color = np.random.randint(10, size=n_nodes)
+    node_size = np.random.randint(10, size=n_nodes)
+    labels = ['node_0', 'node_1', 'node_2', 'node_3', 'node_4']
+    adj_matrix = res_0.get_adjacency_matrix(
+        weights='max_te_lag', fdr=False,)
+    io.export_brain_net(adj_matrix,
+                        mni_coord=mni_coord,
+                        file_name=outfile,
+                        labels=labels,
+                        node_color=node_color,
+                        node_size=node_size)
+
+    # Export of network comparison results.
+    comp_settings = {
+            'cmi_estimator': 'JidtKraskovCMI',
+            'stats_type': 'independent',
+            'n_perm_max_stat': 50,
+            'n_perm_min_stat': 50,
+            'n_perm_omnibus': 200,
+            'n_perm_max_seq': 50,
+            'alpha_comp': 0.26,
+            'n_perm_comp': 200,
+            'tail': 'two',
+            'permute_in_time': True,
+            'perm_type': 'random'
+            }
+    comp = NetworkComparison()
+    res_within = comp.compare_within(
+        comp_settings, res_0, res_1, data_0, data_1)
+    for matrix in ['union', 'comparison', 'pvalue', 'diff_abs']:
+        res_within.export_brain_net_viewer(mni_coord=mni_coord,
+                                           file_name=outfile,
+                                           weights='comparison',
+                                           labels=labels,
+                                           node_color=node_color,
+                                           node_size=node_size)
+
+    # Test checks for input.
+    with pytest.raises(AssertionError):
+        res_within._export_brain_net(adjacency_matrix=np.ones((3, 10)),
+                                     mni_coord=mni_coord[:3, :],
+                                     weights='comparison',
+                                     file_name=outfile)
+    with pytest.raises(AssertionError):
+        res_within.export_brain_net_viewer(mni_coord=mni_coord[:3, :],
+                                           weights='comparison',
+                                           file_name=outfile)
+    with pytest.raises(AssertionError):
+        res_within.export_brain_net_viewer(mni_coord=mni_coord[:, :2],
+                                           weights='comparison',
+                                           file_name=outfile)
+    with pytest.raises(AssertionError):
+        res_within.export_brain_net_viewer(mni_coord=mni_coord,
+                                           weights='comparison',
+                                           file_name=outfile,
+                                           labels=['node_1', 'node_2'])
+    with pytest.raises(AssertionError):
+        res_within.export_brain_net_viewer(mni_coord=mni_coord,
+                                           weights='comparison',
+                                           file_name=outfile,
+                                           node_color=np.arange(n_nodes + 1))
+    with pytest.raises(AssertionError):
+        res_within.export_brain_net_viewer(mni_coord=mni_coord,
+                                           weights='comparison',
+                                           file_name=outfile,
+                                           node_color=np.arange(n_nodes + 1))
 
 
 def test_import_fieldtrip():
@@ -37,17 +128,12 @@ def test_import_matarray():
     n_replications = 3  # no. replications in the example data
 
     # Load hdf5, one to three dimensions.
-    (data, label, timestamps, fsample) = io.import_matarray(
+    data = io.import_matarray(
             file_name=resource_filename(__name__, 'data/one_dim_v7_3.mat'),
             array_name='a',
             dim_order='s',
             file_version='v7.3',
             normalise=False)
-    assert fsample == 1, ('Wrong sampling frequency: {0}'.format(fsample))
-    assert all(timestamps == np.arange(n_samples)), (
-        'Wrong time stamps: {0}'.format(timestamps))
-    assert label[0] == 'channel_000', ('Wrong channel label: {0}.'.format(
-                                                                    label[0]))
     assert data.n_samples == n_samples, (
         'Wrong number of samples: {0}.'.format(data.n_samples))
     assert data.n_processes == 1, (
@@ -55,19 +141,12 @@ def test_import_matarray():
     assert data.n_replications == 1, (
         'Wrong number of replications: {0}.'.format(data.n_replications))
 
-    (data, label, timestamps, fsample) = io.import_matarray(
+    data = io.import_matarray(
             file_name=resource_filename(__name__, 'data/two_dim_v7_3.mat'),
             array_name='b',
             dim_order='sp',
             file_version='v7.3',
             normalise=False)
-    assert fsample == 1, ('Wrong sampling frequency: {0}'.format(fsample))
-    assert all(timestamps == np.arange(n_samples)), (
-        'Wrong time stamps: {0}'.format(timestamps))
-    assert label[0] == 'channel_000', ('Wrong channel label: {0}.'.format(
-                                                                    label[0]))
-    assert label[1] == 'channel_001', ('Wrong channel label: {0}.'.format(
-                                                                    label[1]))
     assert data.n_samples == n_samples, (
         'Wrong number of samples: {0}.'.format(data.n_samples))
     assert data.n_processes == n_processes, (
@@ -75,17 +154,12 @@ def test_import_matarray():
     assert data.n_replications == 1, (
         'Wrong number of replications: {0}.'.format(data.n_replications))
 
-    (data, label, timestamps, fsample) = io.import_matarray(
+    data = io.import_matarray(
             file_name=resource_filename(__name__, 'data/three_dim_v7_3.mat'),
             array_name='c',
             dim_order='rsp',
             file_version='v7.3',
             normalise=False)
-    assert fsample == 1, ('Wrong sampling frequency: {0}'.format(fsample))
-    assert all(timestamps == np.arange(n_samples)), (
-        'Wrong time stamps: {0}'.format(timestamps))
-    assert label[0] == 'channel_000', ('Wrong channel label: {0}.'.format(
-                                                                    label[0]))
     assert data.n_samples == n_samples, (
         'Wrong number of samples: {0}.'.format(data.n_samples))
     assert data.n_processes == n_processes, (
@@ -100,12 +174,11 @@ def test_import_matarray():
         resource_filename(__name__, 'data/two_dim_v7.mat')]
     file_version = ['v4', 'v6', 'v7']
     for i in range(3):
-        (data, label, timestamps, fsample) = io.import_matarray(
-                                                file_name=file_path[i],
-                                                array_name='b',
-                                                dim_order='ps',
-                                                file_version=file_version[i],
-                                                normalise=False)
+        data = io.import_matarray(file_name=file_path[i],
+                                  array_name='b',
+                                  dim_order='ps',
+                                  file_version=file_version[i],
+                                  normalise=False)
         assert data.n_processes == n_processes, (
             'Wrong number of processes'.format(data.n_processes))
         assert data.n_samples == n_samples, (
@@ -115,16 +188,15 @@ def test_import_matarray():
 
     # Load wrong file name.
     with pytest.raises(FileNotFoundError):
-        (data, label, timestamps, fsample) = io.import_matarray(
-                                                file_name='test',
-                                                array_name='b',
-                                                dim_order='ps',
-                                                file_version='v6',
-                                                normalise=False)
+        data = io.import_matarray(file_name='test',
+                                  array_name='b',
+                                  dim_order='ps',
+                                  file_version='v6',
+                                  normalise=False)
 
     # Test wrong variable name.
     with pytest.raises(RuntimeError):
-        (data, label, timestamps, fsample) = io.import_matarray(
+        data = io.import_matarray(
             file_name=resource_filename(__name__, 'data/three_dim_v7_3.mat'),
             array_name='test',
             dim_order='rsp',
@@ -133,7 +205,7 @@ def test_import_matarray():
 
     # Test wrong dim order.
     with pytest.raises(RuntimeError):
-        (data, label, timestamps, fsample) = io.import_matarray(
+        data = io.import_matarray(
             file_name=resource_filename(__name__, 'data/three_dim_v7_3.mat'),
             array_name='c',
             dim_order='rp',
@@ -142,7 +214,7 @@ def test_import_matarray():
 
     # Test wrong file version
     with pytest.raises(RuntimeError):
-        (data, label, timestamps, fsample) = io.import_matarray(
+        data = io.import_matarray(
             file_name=resource_filename(__name__, 'data/three_dim_v7_3.mat'),
             array_name='c',
             dim_order='rp',
@@ -151,5 +223,7 @@ def test_import_matarray():
 
 
 if __name__ == '__main__':
+    test_export_brain_net()
+    test_export_networkx()
     test_import_matarray()
     test_import_fieldtrip()
