@@ -127,7 +127,7 @@ def test_zero_lag():
     corr = np.corrcoef(source, target)[0, 1]
     expected_mi = -0.5 * np.log(1 - corr**2)
 
-    data = Data(np.vstack((source, target)), dim_order='ps', normalise=False)
+    data = Data(np.vstack((source, target)), dim_order='ps')
     settings = {
         'cmi_estimator': 'JidtKraskovCMI',
         'n_perm_max_stat': 21,
@@ -139,7 +139,7 @@ def test_zero_lag():
     nw = MultivariateMI()
     results = nw.analyse_single_target(
         settings, data, target=1, sources='all')
-    mi_estimator = JidtKraskovMI(settings={})
+    mi_estimator = JidtKraskovMI(settings={'normalise': True})
     jidt_mi = mi_estimator.estimate(source, target)
     omnibus_mi = results.get_single_target(1, fdr=False).omnibus_mi
     print('Estimated omnibus MI: {0:0.6f}, estimated MI using JIDT core '

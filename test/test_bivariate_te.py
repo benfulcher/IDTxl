@@ -71,13 +71,15 @@ def test_return_local_values():
         'n_perm_max_seq': 21,
         'n_perm_omnibus': 21,
         'max_lag_sources': max_lag,
-        'min_lag_sources': 4,
+        'min_lag_sources': max_lag,
         'max_lag_target': max_lag}
     target = 2
     te = BivariateTE()
     results_local = te.analyse_network(settings, data, targets=[target])
 
     lte = results_local.get_single_target(target, fdr=False)['te']
+    if lte is None:
+        return
     n_sources = len(results_local.get_target_sources(target, fdr=False))
     assert type(lte) is np.ndarray, (
         'LTE estimation did not return an array of values: {0}'.format(lte))
@@ -381,6 +383,7 @@ def test_analyse_network():
     settings = {
         'cmi_estimator': 'JidtKraskovCMI',
         'n_perm_max_stat': 21,
+        'n_perm_min_stat': 21,
         'n_perm_max_seq': 21,
         'n_perm_omnibus': 30,
         'max_lag_sources': 5,
@@ -468,6 +471,26 @@ def test_discrete_input():
                 expected_mi, res._single_target[1].omnibus_te))
 
 
+@jpype_missing
+def test_mute_data():
+    """Test estimation from MuTE data."""
+    max_lag = 3
+    data = Data()
+    data.generate_mute_data(200, 5)
+    settings = {
+        'cmi_estimator': 'JidtKraskovCMI',
+        'n_perm_max_stat': 21,
+        'n_perm_min_stat': 21,
+        'n_perm_max_seq': 21,
+        'n_perm_omnibus': 21,
+        'max_lag_sources': max_lag,
+        'min_lag_sources': 1,
+        'max_lag_target': max_lag}
+    target = 2
+    te = BivariateTE()
+    te.analyse_network(settings, data, targets=[target])
+
+
 def test_include_target_candidates():
     pass
 
@@ -493,8 +516,9 @@ def test_indices_to_lags():
 
 
 if __name__ == '__main__':
-    test_gauss_data()
+    test_mute_data()
     test_return_local_values()
+    test_gauss_data()
     test_discrete_input()
     test_analyse_network()
     test_check_source_set()
